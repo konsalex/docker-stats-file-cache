@@ -1,0 +1,84 @@
+version: "3"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    hostname: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1GB
+        reservations:
+          cpus: "1"
+          memory: 1GB
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    command:
+      - "--path.rootfs=/host"
+    pid: host
+    restart: unless-stopped
+    volumes:
+      - "/:/host:ro"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.1
+    hostname: cadvisor
+    platform: linux/arm64
+    ports:
+      - 8080:8080
+    volumes:
+      - "/:/rootfs:ro"
+      - "/var/run:/var/run:ro"
+      - "/sys:/sys:ro"
+      - "/var/lib/docker/:/var/lib/docker:ro"
+      # - "/var/run/docker.sock:/var/run/docker.sock:ro" # Macos can uncomment this
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    command:
+      - --log.level=debug
+      - --config.file=/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_SIGNOUT_MENU: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./docker_data/grafana_data:/var/lib/grafana
+    ports:
+      - "9100:3000"
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter
+    user: "1000"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+    command:
+      - --collector.stat_statements
+      - --log.level=debug
+
+networks:
+  monitoring:
+    name: monitoring
+    driver: bridge
